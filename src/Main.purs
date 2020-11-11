@@ -16,7 +16,7 @@ data Action = Increment | Decrement
 type Input = Unit
 type State = Int
 
-component :: forall quert input output m. H.Component HH.HTML query input output m
+component :: forall query input output m. H.Component HH.HTML query input output m
 component =
   H.mkComponent
     { initialState
