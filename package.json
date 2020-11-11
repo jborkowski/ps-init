@@ -1,0 +1,14 @@
+{
+  "name": "ps-init",
+  "description": "First start with Halogen",
+  "version": "1.0.0",
+  "author": "Jonatan Borkowski <jonatan.borkowski@pm.me>",
+  "license": "MIT",
+  "main": "app/main.js",
+  "scripts": {
+    "build": "spago build",
+    "serve": "parcel dev/index.html --open"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
