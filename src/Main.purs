@@ -13,6 +13,10 @@ import Halogen.VDom.Driver (runUI)
 
 data Action = Increment | Decrement
 
+type Input = Unit
+type State = Int
+
+component :: forall quert input output m. H.Component HH.HTML query input output m
 component =
   H.mkComponent
     { initialState
@@ -20,21 +24,24 @@ component =
     , eval: H.mkEval H.defaultEval { handleAction = handleAction }
     }
   where
-  initialState _ = 0
+    initialState :: forall input. input -> State
+    initialState _ = 0
 
-  render state =
-    HH.div_
-      [ HH.button [ HE.onClick \_ -> Just Decrement ] [ HH.text "-" ]
-      , HH.text (show state)
-      , HH.button [ HE.onClick \_ -> Just Increment ] [ HH.text "+" ]
-      ]
+    render :: forall m. State -> H.ComponentHTML Action () m
+    render state =
+      HH.div_
+        [ HH.button [ HE.onClick \_ -> Just Decrement ] [ HH.text "-" ]
+        , HH.text (show state)
+        , HH.button [ HE.onClick \_ -> Just Increment ] [ HH.text "+" ]
+        ]
 
-  handleAction = case _ of
-    Decrement ->
-      H.modify_ \state -> state - 1
+    handleAction :: forall output m. Action -> H.HalogenM State Action () output m Unit
+    handleAction = case _ of
+      Decrement ->
+        H.modify_ \state -> state - 1
 
-    Increment ->
-      H.modify_ \state -> state + 1
+      Increment ->
+        H.modify_ \state -> state + 1
 
 
 main :: Effect Unit
