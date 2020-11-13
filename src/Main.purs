@@ -2,28 +2,19 @@ module Main where
 
 import Prelude
 
-import Affjax as AX
-import Affjax.RequestBody (RequestBody(..))
-import Affjax.ResponseFormat as AXRF
-import Control.Category (identity)
-import Data.Either (hush)
-import Data.Maybe (Maybe(..), maybe)
+import Control.Monad.Rec.Class (forever)
+import Data.Maybe (Maybe(..))
 import Data.Symbol (SProxy(..))
+import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
+import Effect.Aff as Aff
 import Effect.Aff.Class (class MonadAff)
-import Effect.Class (class MonadEffect)
-import Effect.Random (random)
-import Halogen (HalogenQ(..))
+import Effect.Exception (error)
 import Halogen as H
 import Halogen.Aff as HA
-import Halogen.HTML (input, label, output, slot)
 import Halogen.HTML as HH
-import Halogen.HTML.Events as HE
-import Halogen.HTML.Properties as HP
+import Halogen.Query.EventSource as EventSource
 import Halogen.VDom.Driver (runUI)
-import PSCI.Support (eval)
-import Web.Event.Event (Event)
-import Web.Event.Event as Event
 
 main :: Effect Unit
 main = HA.runHalogenAff do
@@ -168,34 +159,68 @@ handleAction = case _ of
 type Slots = ( button :: forall query. H.Slot query Void Int )
 _button = SProxy :: SProxy "button"
 
-parent :: forall query input output m. H.Component HH.HTML query input output m
+type ParentState = { count :: Int }
+
+data ParentAction = Initialize | Increment
+
+parent :: forall query input output m. MonadAff m => H.Component HH.HTML query input output m
 parent =
   H.mkComponent
-    { initialState: identity
+    { initialState
     , render
-    , eval: H.mkEval H.defaultEval
+    , eval: H.mkEval $ H.defaultEval
+      { handleAction = handleAction
+      , initialize = Just Initialize
+      }
     }
   where
-    render :: forall state action. state -> H.ComponentHTML action Slots m
-    render _ =
-      HH.div_ [ HH.slot _button 0 button { label: "Click Me" } absurd ]
+    initialState :: input -> ParentState
+    initialState _ = { count: 0 }
+
+    render :: ParentState -> H.ComponentHTML ParentAction Slots m
+    render { count } =
+      HH.div_ [ HH.slot _button 0 button { label: show count } absurd ]
+
+    handleAction :: ParentAction -> H.HalogenM ParentState ParentAction Slots output m Unit
+    handleAction = case _ of
+      Initialize -> do
+        void $ H.subscribe $ EventSource.affEventSource \emitter -> do
+          fiber <- Aff.forkAff $ forever do
+            Aff.delay $ Milliseconds 1000.0
+            EventSource.emit emitter Increment
+
+          pure $ EventSource.Finalizer do
+            Aff.killFiber (error " Event source finalized") fiber
+
+      Increment ->
+        H.modify_ \st -> st { count = st.count + 1 }
+
 
 -- button :: forall w i. { label :: String } -> HH.HTML w i
 -- button { label } = HH.button [ ] [ HH.text label ]
 
-type Input = { label :: String }
-type State = { label :: String }
+type ButtonInput = { label :: String }
+type ButtonState = { label :: String }
+data ButtonAction = Receive ButtonInput
 
-button :: forall query output m. H.Component HH.HTML query Input output m
+button :: forall query output m. H.Component HH.HTML query ButtonInput output m
 button =
   H.mkComponent
     { initialState
     , render
-    , eval: H.mkEval H.defaultEval
+    , eval: H.mkEval $ H.defaultEval
+      { handleAction = handleAction
+      , receive = Just <<< Receive
+      }
     }
   where
-    initialState :: Input -> State
-    initialState input = input
+    initialState :: ButtonInput -> ButtonState
+    initialState { label } = { label }
 
-    render :: forall action. State -> H.ComponentHTML action () m
-    render { label } = HH.button [ ] [ HH.text label ]
+    render :: ButtonState -> H.ComponentHTML ButtonAction () m
+    render { label } = HH.button_ [ HH.text label ]
+
+    handleAction :: ButtonAction -> H.HalogenM ButtonState ButtonAction () output m Unit
+    handleAction = case _ of
+      Receive input ->
+        H.modify_ _ { label = input.label }
